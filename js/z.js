@@ -20,7 +20,7 @@ var loadedAssets = 0;
 var ColorA;
 var ColorB;
 //video
-var frameLimit;
+var frameLimit = 180;
 var currentFrame = 0;
 
 preload();
@@ -28,7 +28,6 @@ preload();
 function preload() {
 	if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
     socketInit();
-    createFragmentShaderScript();
     initWeather();
 }
 // assetLoaded
@@ -58,49 +57,17 @@ function start() {
     setup();
     animate();
 }
-//createFragmentShaderScript
-function createFragmentShaderScript() {
-    var script = document.createElement('script');
-    script.type = 'x-shader/x-fragment';
-    script.id = 'fragmentShader';
-    var randomFunc = randomShaderFunctions.randomFunction();
-    var randomRedFunc = randomShaderFunctions.randomColorFunction("r");
-    var randomGreenFunc = randomShaderFunctions.randomColorFunction("g");
-    var randomBlueFunc = randomShaderFunctions.randomColorFunction("b");
-    script.text = [
-        "#define PI 3.14159265359",
-        "uniform vec2 u_resolution;",
-        "uniform float u_time;",
-        "uniform vec3 u_colorA;",
-        "uniform vec3 u_colorB;",
-
-        "void main(){",
-            "vec2 st=gl_FragCoord.xy/u_resolution.xy;",
-            "vec3 color=vec3(.0);",
-            "vec3 pct=vec3(" + randomFunc + ");",
-            "pct.r=" + randomRedFunc + ";",
-            "pct.g=" + randomGreenFunc + ";",
-            "pct.b=" + randomBlueFunc + ";",
-            "color=mix(u_colorA,u_colorB,pct);",
-            "gl_FragColor=vec4(color,1.);",
-        "}"
-        ].join('\n');
-    document.body.appendChild(script);
-    socket.emit('shader', script.text);
-    assetLoaded(); 
-}
 //initWeather
 function initWeather() {
     var weather = require ('openweathermap');
     var Client = require('node-rest-client').Client;
     var config = require('./../config');
     var client = new Client();
-    console.log(locationFull);
     client.get(locationFull + "/getRandomCity", function (data, response) {
         weather.defaults({units: 'metric', lang: 'en', mode: 'json'});
         weather.now({id: data.cityID, APPID: config.openweathermap.APPID}, report);
         function report(err, json) {
-            if (!err) {
+            if(!err) {
                 var weatherCode = json.weather[0].id;
                 var weatherTemp = json.main.temp;
                 var colors = weatherMapping.mapWeatherCode(weatherCode, weatherTemp);
@@ -110,16 +77,46 @@ function initWeather() {
                     socket.emit('weather', {    
                         description: json.weather[0].description,
                         temperature: weatherTemp,
-                        colors: {
-                            colorA: ColorA.r + "," + ColorA.g + "," + ColorA.b,
-                            colorB: ColorB.r + "," + ColorB.g + "," + ColorB.b
-                        }
-                    }); 
+                    });
+                    createFragmentShaderScript(); 
                     assetLoaded();  
                 }
             }
         }
     });
+}
+//createFragmentShaderScript
+function createFragmentShaderScript() {
+    var script = document.createElement('script');
+    script.type = 'x-shader/x-fragment';
+    script.id = 'fragmentShader';
+    var randomFunc = randomShaderFunctions.randomFunction();
+    var randomRedFunc = randomShaderFunctions.randomColorFunction("r");
+    var randomGreenFunc = randomShaderFunctions.randomColorFunction("g");
+    var randomBlueFunc = randomShaderFunctions.randomColorFunction("b");
+    var colorOne = "vec3(" + ColorA.r + "," + ColorA.g + "," + ColorA.b + ")";
+    var colorTwo = "vec3(" + ColorB.r + "," + ColorB.g + "," + ColorB.b + ")";
+    script.text = [
+        "#define PI 3.14159265359",
+        "uniform vec2 u_resolution;",
+        "uniform float u_time;",
+
+        "void main(){",
+            "vec3 colorA=" + colorOne + ";",
+            "vec3 colorB=" + colorTwo + ";",
+            "vec2 st=gl_FragCoord.xy/u_resolution.xy;",
+            "vec3 color=vec3(.0);",
+            "vec3 pct=vec3(" + randomFunc + ");",
+            "pct.r=" + randomRedFunc + ";",
+            "pct.g=" + randomGreenFunc + ";",
+            "pct.b=" + randomBlueFunc + ";",
+            "color=mix(colorA,colorB,pct);",
+            "gl_FragColor=vec4(color,1.);",
+        "}"
+        ].join('\n');
+    document.body.appendChild(script);
+    socket.emit('shader', script.text);
+    assetLoaded(); 
 }
 // setup
 function setup() {
@@ -131,8 +128,6 @@ function setup() {
     var geometry = new THREE.PlaneBufferGeometry(2, 2);
 
     var uniforms = {
-        u_colorA: {type: "c", value: ColorA},
-        u_colorB: {type: "c", value: ColorB},
         u_time: { type: "f", value: 1.0 },
         u_resolution: { type: "v2", value: new THREE.Vector2() }
     };
@@ -184,10 +179,19 @@ function render() {
 }
 
 function renderFrame() {
-    if( currentFrame >= 1 && currentFrame <= frameLimit ) {
-        sendFrame();
+    if(currentFrame >= 1 && currentFrame < frameLimit + 1) {
+        if(currentFrame == 1){
+            sendCover(); 
+        }
+        if(frameLimit != 1){
+            sendFrame(); 
+        }
         currentFrame++;
     }
+}
+
+function sendCover() {
+    socket.emit('coverFrame',document.querySelector('canvas').toDataURL('image/jpeg', 1.0));
 }
 
 function sendFrame() {
@@ -196,19 +200,13 @@ function sendFrame() {
         frame: currentFrameString,
         file: document.querySelector('canvas').toDataURL()
     });
-    if (currentFrameString == '001') {
-        socket.emit('coverFrame',document.querySelector('canvas').toDataURL('image/jpeg', 1.0));
-    }
 }
 
 function socketInit() {
     socket = io.connect(locationFull);
-    socket.on("frameLimit", setFrameLimit);
+    socket.emit("frameLimit", frameLimit);
     socket.emit('bot', 'gradient');
     assetLoaded();
 }
 
-function setFrameLimit(data) {
-    frameLimit = data;
-}
 console.log("client is running");
