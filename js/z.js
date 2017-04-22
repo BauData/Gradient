@@ -60,6 +60,7 @@ function start() {
 //initWeather
 function initWeather() {
     var weather = require ('openweathermap');
+    var weatherMapping = require ('weatherMapping');
     var Client = require('node-rest-client').Client;
     var config = require('./../config');
     var client = new Client();
