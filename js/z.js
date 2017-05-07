@@ -146,7 +146,7 @@ function setup() {
 	renderer.setPixelRatio( window.devicePixelRatio );
 	renderer.setSize( width , height );
 
-    setTimeout( function(){ currentFrame=1 }, 100);
+    setTimeout( function(){ currentFrame=1 }, 1000);
 
     onWindowResize();
     window.addEventListener( 'resize', onWindowResize, false );
